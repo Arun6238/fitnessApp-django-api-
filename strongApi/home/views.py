@@ -1,7 +1,6 @@
 from django.contrib.auth import authenticate
 from datetime import datetime, timedelta
 from django.views.decorators.csrf import csrf_exempt
-from django.middleware import csrf
 
 from rest_framework import status
 from rest_framework.response import Response

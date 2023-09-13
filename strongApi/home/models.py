@@ -44,6 +44,9 @@ class Instruction(models.Model):
     step_number = models.PositiveIntegerField()
     text = models.TextField(max_length=500)
 
+    def __str__(self):
+        return f"{self.step_number} - {self.exercise}"
+    
 
 class CustomeExercise(models.Model):
     user = models.ForeignKey(User,on_delete=models.CASCADE)
