@@ -8,8 +8,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny,IsAuthenticated
 from rest_framework.decorators import api_view, permission_classes,throttle_classes
 
-from home.models import Exercise,Instruction,CustomeExercise,CATEGORY_CHOICES,BODY_PART_CHOICES
-from .serializer import AllExerciseSerializer
+from home.models import Exercise,Instruction,CustomeExercise,TrainingSession,WorkoutSet,TrainingTemplate,TrainingTemplateExercise,CATEGORY_CHOICES,BODY_PART_CHOICES
+from .serializer import AllExerciseSerializer,InstructionSerializer,TrainingSessionSerializer
 
 def validate_exercise(exercise):
     name = exercise.get("name")
@@ -158,10 +158,112 @@ def exercise_list(request):
         print(e.args[0])
         return Response({"detail": "error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+# returns information about a given exercise 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_exercise(request):
+    is_custom = request.GET.get('isCustom') == "true"
+    exercise_id = request.GET.get('exercise_id')
+
+    print(f"is_custom:{is_custom} \n exercise_id: {exercise_id}")
+    result = {
+        "exercise":{},
+        "instructions":[],
+        "history":None,
+    }
+    try:
+        if is_custom:
+            exercise =  CustomeExercise.objects.get(id=exercise_id)        
+        else:
+            exercise = Exercise.objects.get(id=exercise_id)
+            instruction  = Instruction.objects.filter(exercise = exercise).order_by("step_number")
+            instruction_serializer = InstructionSerializer(instruction,many=True)
+            result['instructions'] = instruction_serializer.data
+        exercise_serializer = AllExerciseSerializer(exercise)
+        result['exercise'] = exercise_serializer.data
+        return Response(result)
+    
+    except Exception as e:
+            return Response({"error": e.args[0]}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# Workout
+# -------
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_templates(request):
+    user  = request.user
+    result = []
+    try:
+        templates = TrainingTemplate.objects.filter(user=user)
+        if templates is not None:
+            for i in templates:
+                template = {}
+                template["id"] = i.id
+                template["name"] = i.name
+                template["exercises"] = []
+
+                exercises = TrainingTemplateExercise.objects.filter(training_template = i)
+                if exercises.exists():
+                    for exercise in exercises:
+                        value = {
+                            "id":exercise.id,
+                            "name":exercise.exercise.name,
+                            "sets":exercise.sets
+                        }
+                        template["exercises"].append(value)
+                result.append(template)
+        return Response({"data":result})
+    except Exception as e:
+        print(e.args[0])
+        return Response({"error":e.args[0]},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def start_new_training_session(request):
+    user = request.user
+    new_training_session_data = json.loads(request.body)
+
+    # Check if there is a workout session already in progress
+    existing_session = TrainingSession.objects.filter(user=user).first()
+    if existing_session:
+        return Response({"error": f"You are currently performing '{existing_session.name}'"}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        new_training_session = TrainingSession.objects.create(
+            user=user,
+            name=new_training_session_data.get("name")
+        )
+        exercises = new_training_session_data.get("exercises")
+        # create workout set only if the there is an exercies list present and list is not empty
+        if exercises is not None and len(exercises)>0:
+            for i in exercises:
+                id = i["id"]
+                number_of_sets = i["sets"]
+                is_custom = i["is_custom"]
+
+                # create new Workout set ony if number of sets is greater than 0
+                if number_of_sets > 0:
+                    # check if the exercise is a custom_exercise
+                    if is_custom:
+                        exercise = CustomeExercise.objects.get(id=id)
+                        for num  in range(number_of_sets):
+                            WorkoutSet.objects.create(
+                                training_session = new_training_session,
+                                custome_exercise = exercise,
+                                set_number = num + 1
+                            )
+                    else:
+                        exercise = Exercise.objects.get(id=id)
+                        for num in range(number_of_sets):
+                            WorkoutSet.objects.create(
+                                training_session = new_training_session,
+                                default_exercise = exercise,
+                                set_number = num + 1
+                            )
+        serializer = TrainingSessionSerializer(new_training_session)
+        data = serializer.data
+        return Response({"data":data,"message": "New training session started successfully"}, status=status.HTTP_201_CREATED)
 
 
 

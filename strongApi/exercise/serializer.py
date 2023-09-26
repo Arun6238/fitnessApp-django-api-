@@ -1,8 +1,12 @@
-from home.models import Exercise,Instruction,CustomeExercise
+from home.models import Exercise,Instruction,CustomeExercise,TrainingSession,TrainingTemplate,TrainingTemplateExercise
 from rest_framework import serializers
 from django.contrib.auth.models import User
 
 
+class InstructionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Instruction
+        exclude = ['id','exercise']
 
 class ExerciseSerializer(serializers.ModelSerializer):
     class Meta:
@@ -31,3 +35,9 @@ class AllExerciseSerializer(serializers.Serializer):
 
     def get_is_custom(self, obj):
         return hasattr(obj,'user')
+
+class TrainingSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TrainingSession
+        fields = '__all__'
+

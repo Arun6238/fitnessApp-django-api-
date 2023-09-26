@@ -9,5 +9,7 @@ admin.site.register([
     TrainingHistory,
     WorkoutSet,
     MeasurementType,
-    BodyMeasurement
+    BodyMeasurement,
+    TrainingTemplate,
+    TrainingTemplateExercise
     ])

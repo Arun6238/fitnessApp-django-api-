@@ -57,6 +57,24 @@ class CustomeExercise(models.Model):
     def __str__(self):
         return self.name
 
+class TrainingTemplate(models.Model):
+    user = models.ForeignKey(User,on_delete=models.CASCADE)
+    name = models.CharField(max_length=150)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.name}"
+
+# model to save all the exercise and number of sets related to each Training template
+class TrainingTemplateExercise(models.Model):
+    training_template = models.ForeignKey(TrainingTemplate,on_delete=models.CASCADE)
+    exercise = models.ForeignKey(Exercise,on_delete=models.CASCADE)
+    sets = models.PositiveIntegerField(default=1)
+
+    def __str__(self):
+        return f"{self.training_template} - {self.exercise.name} - {self.sets}"
+
+    
+
 class TrainingSession(models.Model):
     user = models.OneToOneField(User, on_delete= models.CASCADE)
     name = models.CharField(max_length= 150, null= True, blank= True)
