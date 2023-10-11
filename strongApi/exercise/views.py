@@ -120,8 +120,7 @@ def exercise_list(request):
         next= ""
         has_next = True
         sliceValue = 10
-
-
+        
         # Query for Exercise objects with name greater than 'next'
         standard_exercise = Exercise.objects.filter(
             name__gt=next_exercise,                
@@ -195,7 +194,7 @@ def get_all_templates(request):
     user  = request.user
     result = []
     try:
-        templates = TrainingTemplate.objects.filter(user=user)
+        templates = TrainingTemplate.objects.filter(user=user).order_by("-id")
         if templates is not None:
             for i in templates:
                 template = {}
@@ -206,9 +205,11 @@ def get_all_templates(request):
                 exercises = TrainingTemplateExercise.objects.filter(training_template = i)
                 if exercises.exists():
                     for exercise in exercises:
+
                         value = {
                             "id":exercise.id,
-                            "name":exercise.exercise.name,
+                            "name":exercise.exercise.name if exercise.exercise is not None else exercise.custom_exercise.name,
+                            "is_custom":False if exercise.exercise is not None else True,
                             "sets":exercise.sets
                         }
                         template["exercises"].append(value)
@@ -266,6 +267,40 @@ def start_new_training_session(request):
         return Response({"data":data,"message": "New training session started successfully"}, status=status.HTTP_201_CREATED)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def create_new_template(request):
+    user  = request.user
+    try:
+        template = json.loads(request.body)
+        template_name = template.get("name")
+
+        new_template = TrainingTemplate.objects.create(user=user,name=template_name)
+
+        for i in template["exercises"]:
+            exercise = i["exercise"]
+            exercise_id = exercise["id"]
+            new_exercise = None
+            if(exercise["is_custom"]):
+                new_exercise = CustomeExercise.objects.get(id =exercise_id)
+                TrainingTemplateExercise.objects.create(
+                training_template=new_template,
+                custom_exercise=new_exercise,
+                sets=i["sets"])
+            else:
+                new_exercise = Exercise.objects.get(id=exercise_id)
+                TrainingTemplateExercise.objects.create(
+                training_template=new_template,
+                exercise=new_exercise,
+                sets=i["sets"])
+    except KeyError as e:
+        print(e.args[1])
+        return Response({"error":e.args[1]},status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(e.args[1])
+        return Response({"error",e.args[1]},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response({"success":"template saved succesfully"})
 
 
 

@@ -67,7 +67,8 @@ class TrainingTemplate(models.Model):
 # model to save all the exercise and number of sets related to each Training template
 class TrainingTemplateExercise(models.Model):
     training_template = models.ForeignKey(TrainingTemplate,on_delete=models.CASCADE)
-    exercise = models.ForeignKey(Exercise,on_delete=models.CASCADE)
+    exercise = models.ForeignKey(Exercise,on_delete=models.CASCADE,null=True)
+    custom_exercise = models.ForeignKey(CustomeExercise,on_delete=models.CASCADE,null=True)
     sets = models.PositiveIntegerField(default=1)
 
     def __str__(self):
