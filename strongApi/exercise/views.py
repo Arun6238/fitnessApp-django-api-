@@ -1,4 +1,4 @@
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError,ObjectDoesNotExist
 from django.db import transaction
 
 import json
@@ -103,7 +103,7 @@ def add_default_exercise(request):
     
     # Handle validation error
     except ValidationError as e:
-        print(e.args[0])
+        print(str(e))
         return Response({"detail": "invalid category"}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -154,7 +154,7 @@ def exercise_list(request):
         serializer = AllExerciseSerializer(combined_array,many = True)
         return Response({"exercise":serializer.data,"next":next,"has_next":has_next})
     except Exception as e:
-        print(e.args[0])
+        print(str(e))
         return Response({"detail": "error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # returns information about a given exercise 
@@ -183,7 +183,7 @@ def get_exercise(request):
         return Response(result)
     
     except Exception as e:
-            return Response({"error": e.args[0]}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # Workout
@@ -205,9 +205,8 @@ def get_all_templates(request):
                 exercises = TrainingTemplateExercise.objects.filter(training_template = i)
                 if exercises.exists():
                     for exercise in exercises:
-
                         value = {
-                            "id":exercise.id,
+                            "id":exercise.exercise.id if exercise.exercise is not None else exercise.custom_exercise.id,
                             "name":exercise.exercise.name if exercise.exercise is not None else exercise.custom_exercise.name,
                             "is_custom":False if exercise.exercise is not None else True,
                             "sets":exercise.sets
@@ -216,8 +215,8 @@ def get_all_templates(request):
                 result.append(template)
         return Response({"data":result})
     except Exception as e:
-        print(e.args[0])
-        return Response({"error":e.args[0]},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print(str(e))
+        return Response({"error":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["POST"])
@@ -267,15 +266,15 @@ def start_new_training_session(request):
         return Response({"data":data,"message": "New training session started successfully"}, status=status.HTTP_201_CREATED)
 
 
-@api_view(["POST"])
+@api_view(["POST","PUT"])
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def create_new_template(request):
     user  = request.user
     try:
-        template = json.loads(request.body)
+        template = request.data
         template_name = template.get("name")
-
+        print(template)
         new_template = TrainingTemplate.objects.create(user=user,name=template_name)
 
         for i in template["exercises"]:
@@ -295,21 +294,146 @@ def create_new_template(request):
                 exercise=new_exercise,
                 sets=i["sets"])
     except KeyError as e:
-        print(e.args[1])
-        return Response({"error":e.args[1]},status=status.HTTP_400_BAD_REQUEST)
+        print(str(e))
+        return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        print(e.args[1])
-        return Response({"error",e.args[1]},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print(str(e))
+        return Response({"error",str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     return Response({"success":"template saved succesfully"})
 
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def update_template(request,id):
+    try:
+        data = request.data
+        template = TrainingTemplate.objects.get(id=id)
+        old_template_exercises = TrainingTemplateExercise.objects.filter(training_template=template)
+        old_template_exercises.delete()
+        for i in data["exercises"]:
+            exercise = i["exercise"]
+            exercise_id = exercise["id"]
+            new_exercise = None
+            print("exercise-------",exercise)
+            if(exercise["is_custom"]):
+                new_exercise = CustomeExercise.objects.get(id =exercise_id)
+                TrainingTemplateExercise.objects.create(
+                training_template=template,
+                custom_exercise=new_exercise,
+                sets=i["sets"])
+            else:
+                new_exercise = Exercise.objects.get(id=exercise_id)
+                TrainingTemplateExercise.objects.create(
+                training_template=template,
+                exercise=new_exercise,
+                sets=i["sets"])
+        return Response({"message":"Template successfully updated"},status=status.HTTP_200_OK)
+
+    except KeyError as e:
+        print(str(e))
+        return Response({"error":str(e)},status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(str(e))
+        return Response({"error",str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#     {'name': 'Test 2', 
+    #     'exercises': [
+    #         {'exercise': 
+    #             {'id': 34, 'name': 'A Custom Exercise', 'is_custom': True, 'sets': 2},
+    #         'sets': 2}, 
+    #         {'exercise': 
+    #             {'id': 35, 'name': 'Bench Press (Barbell )', 'is_custom': False, 'sets': 3}, 
+    #         'sets': 3}
+    #     ]
+    # }
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_template(request,id):
+    try:
+        template = TrainingTemplate.objects.get(id=id)
+        if template.user == request.user:
+            template.delete()
+            response_data = {"success": "Template successfully deleted"}
+            return Response(response_data, status=status.HTTP_200_OK)
+        else:
+            response_data = {"error": "You are not the owner of this template."}
+            return Response(response_data, status=status.HTTP_403_FORBIDDEN)
+    except TrainingTemplate.DoesNotExist:
+        response_data = {"error": "Template not found"}
+        return Response(response_data, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        response_data = {"error": str(e)}
+        return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def rename_template(request,id):
+    try:
+        template = TrainingTemplate.objects.get(id=id)
+        data = request.data
+        new_name = data.get("name")
+        if(not new_name):
+            response_data = {"warning": "Name cannot be empty"}
+            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+        if template.user == request.user:
+            template.name = new_name
+            template.save()
+            response_data = {"message": "Template renamed successfully "}
+            return Response(response_data, status=status.HTTP_200_OK)
+        else:
+            response_data = {"error": "You are not the owner of this template."}
+            return Response(response_data, status=status.HTTP_403_FORBIDDEN)
+    except TrainingTemplate.DoesNotExist:
+        response_data = {"error": "Template not found"}
+        return Response(response_data, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        response_data = {"error": str(e)}
+        return Response(response_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
 
+"""
+    {
+        'name': 'Test 2', 
+        'exercises': [
+            {'exercise': {
+                'id': 2, 
+                'name': 'A Custom Exercise', 
+                'body_part': 'Other',
+                'category': 'Machine/Other',
+                'user': {
+                    'id': 1, 
+                    'username': 'user', 
+                    'email': 'user@gmail.com'
+                    }, 
+                'is_custom': True
+            },
+            'sets': 2},
+            {'exercise': {
+                'id': 6, 
+                'name': 'Bench Press (Barbell )', 
+                'body_part': 'Chest', 
+                'category': 'Barbell', 
+                'image': 'https://i.ibb.co/606963r/Bench-press.jpg', 
+                'is_custom': False}, 
+            'sets': 3}
+        ]
+    }
 
-
-
-
+    {'name': 'Test 2', 
+        'exercises': [
+            {'exercise': 
+                {'id': 34, 'name': 'A Custom Exercise', 'is_custom': True, 'sets': 2},
+            'sets': 2}, 
+            {'exercise': 
+                {'id': 35, 'name': 'Bench Press (Barbell )', 'is_custom': False, 'sets': 3}, 
+            'sets': 3}
+        ]
+    }
+"""
 
 
 

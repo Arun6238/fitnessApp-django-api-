@@ -36,7 +36,7 @@ class Exercise(models.Model):
     image = models.URLField()
 
     def __str__(self):
-        return self.name
+        return self.name + str(self.id)
     
 # model to save all the exercise instrucitons
 class Instruction(models.Model):
@@ -62,7 +62,7 @@ class TrainingTemplate(models.Model):
     name = models.CharField(max_length=150)
 
     def __str__(self):
-        return f"{self.user.username} - {self.name}"
+        return f"{self.user.username} - {self.name} {self.id}"
 
 # model to save all the exercise and number of sets related to each Training template
 class TrainingTemplateExercise(models.Model):
@@ -72,7 +72,7 @@ class TrainingTemplateExercise(models.Model):
     sets = models.PositiveIntegerField(default=1)
 
     def __str__(self):
-        return f"{self.training_template} - {self.exercise.name} - {self.sets}"
+        return f"{self.training_template} "
 
     
 
